@@ -120,7 +120,7 @@ class Case:
         elif kind == "exam":
             out.append("Cold, mottled peripheries, CRT 5 s." if (d.get("map") or 90) < 65 else "Warm peripheries, CRT 2 s.")
             if self.flags.get("bleeding") and self.hidden == "hypo":
-                out.append("Drainage cannula dressing soaked with fresh blood, steady ooze.")
+                out.append("Drainage cannula insertion site bleeding briskly; dressing and sheets soaked with fresh blood.")
             elif self.flags.get("bleeding"):
                 out.append("Abdominal drain filling with fresh blood.")
             if self.flags.get("tension"):
@@ -204,10 +204,12 @@ class Station3(Case):
         if self.hidden == "hypo" and s.t > 20 and not self.flags.get("bleedStarted"):
             self.flags.update(bleedStarted=True, bleeding=True, bleed_site="VenaCava")
             s.act({"type": "hemorrhage", "compartment": "VenaCava", "rate": 260})
-        if not self.flags.get("alarmAt") and s.ecmo["on"] and s.pump.pven < -100:
+        # Alarm on whichever comes first: chatter (what the console shows) or Pven below -100.
+        if not self.flags.get("alarmAt") and s.ecmo["on"] and (s.pump.collapse > 0.6 or s.pump.pven < -100):
             self.flags["alarmAt"] = s.t
             s.events.append(("flag", "alarmAt", s.t, s.pump.rpm))
-            say(s, "Perfusionist: Pven below −100 and the drainage line is chattering.", "البيرفيوجنست: الـ Pven تحت −١٠٠ وخط الدرنقة بيعمل chatter.")
+            say(s, f"Perfusionist: Pven {round(s.pump.pven)} mmHg and the drainage line is chattering.",
+                f"البيرفيوجنست: الـ Pven {round(s.pump.pven)} وخط الدرنقة بيعمل chatter.")
 
 
 CASES = {c.id: c for c in (Free, Hem, Sepsis, Cardiogenic, ARDS, Station3)}

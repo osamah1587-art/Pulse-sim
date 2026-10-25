@@ -80,6 +80,8 @@ async def ws(websocket: WebSocket):
         nonlocal sess, case, th
         if sess:
             sess.stop()
+        # Drop the old session so its queued frames are not sent as the new case's first frames.
+        sess, case = None, None
         cls = CASES.get(case_id, CASES["free"])
         await websocket.send_json({"type": "loading", "case": case_id})
         def build():
@@ -103,7 +105,8 @@ async def ws(websocket: WebSocket):
             await asyncio.sleep(0.1)
             if not sess:
                 continue
-            if case and sess.t - last_tick >= 0.25:
+            # sess.t restarts at 0 on a new case, so reset the tick clock too.
+            if case and (sess.t < last_tick or sess.t - last_tick >= 0.25):
                 last_tick = sess.t
                 try:
                     case.tick()

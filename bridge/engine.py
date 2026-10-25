@@ -107,7 +107,11 @@ class Pump:
 
     def update(self, cvp, ret_p, t, dt, drain_p=None):
         # Collapse thresholds tuned to Pulse: CVP on VV ECMO sits around 3 mmHg in this patient.
-        target = (3.0 * ((2.5 - cvp) / 1.2) ** 2 if cvp < 2.5 else 0.0) + max(0.0, self.rd_mul - 1.6) * 0.7
+        # The critical preload scales with pump suction (head ~ RPM^2), so turning RPM down
+        # relieves the collapse, and it comes back at the lower RPM if preload keeps falling.
+        suction = (self.rpm / 3500.0) ** 2
+        crit = 2.5 * suction
+        target = (3.0 * ((crit - cvp) / 1.2) ** 2 if cvp < crit else 0.0) + max(0.0, self.rd_mul - 1.6) * 0.7 * suction
         target = min(40.0, target)
         self.collapse += (target - self.collapse) * min(1.0, dt / 0.3)
         rd = 15.0 * self.rd_mul * (1.0 + self.collapse)
@@ -118,7 +122,8 @@ class Pump:
         # Drainage pressure: Pulse's own value (cannula + limb resistance, including malposition),
         # plus the extra suction a collapsing vessel adds, which Pulse's linear circuit cannot produce.
         base = drain_p if drain_p is not None else cvp - q * 9.5 * self.rd_mul
-        self.pven = base - q * 15.0 * self.collapse
+        # Calibrated so a chattering line (collapse > 0.6) reads below about -100 mmHg at usual flows.
+        self.pven = max(-350.0, base - q * 28.0 * min(self.collapse, 3.0))
         return q
 
 
