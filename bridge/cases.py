@@ -150,16 +150,16 @@ class Sepsis(Case):
 
     def setup(self):
         self.s.act({"type": "intubate"})
-        self.s.act({"type": "cvmod", "svr": 0.4})
+        self.s.act({"type": "cvmod", "svr": 0.32, "hr": 1.35})
 
     def case_tick(self):
         s = self.s
         self.once("cultures", lambda: s.t > 60, lambda: say(s, "Nurse: cultures sent. Hang antibiotics now?", "الممرضة: المزارع اتبعتت. أعلّق المضاد الحيوي؟"))
-        # Antibiotics: vasoplegia eases slowly (SVR multiplier 0.4 -> 0.7 over 15 min)
+        # Antibiotics: vasoplegia eases slowly (SVR multiplier 0.32 -> 0.62 over 15 min)
         if self.flags.get("abx") and int(s.t) % 30 == 0 and self.flags.get("lastAbx") != int(s.t):
             self.flags["lastAbx"] = int(s.t)
             k = min(1.0, (s.t - self.flags["abx"]) / 900.0)
-            s.act({"type": "cvmod", "svr": 0.4 + 0.3 * k})
+            s.act({"type": "cvmod", "svr": 0.32 + 0.3 * k, "hr": 1.35 - 0.2 * k})
 
 
 class Cardiogenic(Case):
