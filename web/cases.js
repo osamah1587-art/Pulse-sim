@@ -63,7 +63,7 @@ const CASES = {
       { id: "rpm_down", en: "Immediately reduce RPM to stop the chatter (within 90 s of the alarm)", ar: "نزّل الـ RPM فوراً عشان توقف الـ chatter (خلال ٩٠ ثانية من الإنذار)", w: 20, test: c => !!(c.F.alarmAt && c.F.rpmDownAt && c.F.rpmDownAt - c.F.alarmAt <= 90) },
       { id: "assess", en: "Assess: inspect circuit/cannula AND bedside echo", ar: "التقييم: افحص الدايرة والكانيولا واعمل إيكو", w: 15, test: c => c.A.circuit > 0 && c.A.echo > 0 },
       { id: "treat", en: "Treat the cause", ar: "عالج السبب", w: 30, test: c => !!(c.F.repositioned || (c.F.siteControlled && (c.A.prbcMl || 0) + (c.A.crystalloidMl || 0) >= 500)) },
-      { ...libObj("pven_safe"), w: 25 },
+      { ...libObj("pven_safe"), w: 25, en: "After the alarm: restore flow ≥ 3.5 L/min with Pven > −100 and no chatter", ar: "بعد الإنذار: رجّع الفلو ≥ ٣.٥ لتر مع Pven أعلى من −١٠٠ ومن غير chatter", test: c => !!c.F.alarmAt && c.t > c.F.alarmAt + 30 && OBJ_LIB.pven_safe.test(c) },
       { id: "rpm_up", en: "Increased RPM while the line was chattering", ar: "علّيت الـ RPM والخط بيعمل chatter", w: 15, pitfall: true, test: c => !!c.F.rpmUpDuringSuck },
       { id: "clamp", en: "Stopped ECMO in a dependent patient", ar: "وقفت الـ ECMO لمريض معتمد عليه", w: 20, pitfall: true, test: c => !!c.F.ecmoStopped }] },
 };
