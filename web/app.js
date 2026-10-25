@@ -144,7 +144,7 @@ $("bNeedle").onclick = () => { send({ type: "proc", name: "needle" }); act("need
 $("bPeri").onclick = () => { send({ type: "proc", name: "peri" }); act("peri", "Pericardiocentesis"); };
 let cprOn = false;
 $("bCpr").onclick = () => { cprOn = !cprOn; action({ type: "cpr", on: cprOn }); $("bCpr").textContent = cprOn ? "Stop CPR" : "Start CPR"; act("cpr", cprOn ? "CPR started (automated 110/min)" : "CPR stopped"); };
-$("bShock").onclick = () => { action({ type: "rhythm", rhythm: "NormalSinus" }); act("shock", "Defibrillation 200 J"); };
+$("bShock").onclick = () => { action({ type: "defib" }); act("shock", "Defibrillation (unsynchronized)"); };
 $("bTension").onclick = () => { action({ type: "tension", severity: 0.6, side: "Right" }); C.F.tension = true; log("Right tension pneumothorax started"); };
 $("selRhythm").onchange = () => { const r = $("selRhythm").value; if (r) { action({ type: "rhythm", rhythm: r }); log("Rhythm → " + r); } $("selRhythm").value = ""; };
 $("bCanVV").onclick = () => { send({ type: "proc", name: "cannulate_vv" }); C.F.cannulating = true; act("cannulateVV", "VV cannulation started"); syncEcmoUi(); setTimeout(() => { C.F.cannulating = false; }, 95000 / speed); };
@@ -202,7 +202,7 @@ function showReveal() { if (C.hidden) $("debrief").innerHTML = "<p><b>Hidden cau
 // ---------- waveforms ----------
 const wc = $("waveCanvas"), wx = wc.getContext("2d");
 let W = 0, H = 0, sweepSec = 6, lastPts = null, samples = [], artDelay = [];
-let pvBuf = [], pvHist = [], lastEcgPeak = 0, prevEcg = 0;
+let pvBuf = [], pvHist = [], lastEcgPeak = 0, prevEcg = 0, ecgMax = 0.5;
 function sizeWaves() { const r = window.devicePixelRatio || 1; W = wc.clientWidth; H = wc.clientHeight; wc.width = W * r; wc.height = H * r; wx.setTransform(r, 0, 0, r, 0, 0); clearWaves(); }
 function clearWaves() { wx.fillStyle = "#060a0c"; wx.fillRect(0, 0, W, H); lastPts = null; }
 function addSample(w) {
@@ -213,7 +213,9 @@ function addSample(w) {
   samples.push({ t, ecg: ecg || 0, art: abp || 0, pleth: ((artDelay[0] || 0) - dia) / pp * amp, paw: paw || 0 });
   if (lvV != null && lvP != null) {
     pvBuf.push([lvV, lvP]);
-    if (prevEcg < 0.5 && (ecg || 0) >= 0.5 && t - lastEcgPeak > 0.25) { if (pvBuf.length > 10) { pvHist.push(pvBuf); if (pvHist.length > 5) pvHist.shift(); } pvBuf = []; lastEcgPeak = t; }
+    ecgMax = Math.max((ecg || 0), ecgMax * 0.999);
+    const thr = Math.max(0.15, 0.5 * ecgMax);
+    if (prevEcg < thr && (ecg || 0) >= thr && t - lastEcgPeak > 0.25) { if (pvBuf.length > 10) { pvHist.push(pvBuf); if (pvHist.length > 5) pvHist.shift(); } pvBuf = []; lastEcgPeak = t; }
     if (pvBuf.length > 300) pvBuf = [];
   }
   prevEcg = ecg || 0;

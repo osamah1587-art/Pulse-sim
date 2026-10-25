@@ -15,7 +15,7 @@ from pulse.cdm.engine import SEDataRequest, SEDataRequestManager
 from pulse.cdm.scalars import (ElectricPotentialUnit, FrequencyUnit, MassPerVolumeUnit, PressureUnit,
                                PressureTimePerVolumeUnit, TemperatureUnit, TimeUnit, VolumeUnit,
                                VolumePerTimeUnit)
-from pulse.cdm.patient_actions import (SEHemorrhage, eHemorrhage_Compartment, SESubstanceInfusion,
+from pulse.cdm.patient_actions import (SEHemorrhage, SESubstanceInfusion,
                                        SESubstanceCompoundInfusion, SEArrhythmia, SEChestCompressionAutomated,
                                        SETensionPneumothorax, SENeedleDecompression, SEPericardialEffusion,
                                        SEAcuteRespiratoryDistressSyndromeExacerbation, SEIntubation,
@@ -141,6 +141,8 @@ class SimSession:
         self._ecmo_cfg = None
         self._last_flow_set = -1.0
         self._pump_acc = 0.0
+        self.dead = False
+        self.cvmods = {}
         self.events = []
         self.weight = 70.0
         ok = self.engine.serialize_from_file(os.path.join(PULSE_BIN, "states", state_file), self.drm)
@@ -191,6 +193,10 @@ class SimSession:
             e.process_action(h)
         elif kind == "rhythm":
             r = SEArrhythmia(); r.set_rhythm(eHeartRhythm[a["rhythm"]]); e.process_action(r)
+        elif kind == "defib":
+            from pulse.cdm.patient_actions import eDefibrillate
+            r = SEArrhythmia(); r.set_rhythm(eHeartRhythm.NormalSinus); r.set_defibrillation(eDefibrillate.Unsynchronized)
+            e.process_action(r)
         elif kind == "cpr":
             c = SEChestCompressionAutomated()
             c.get_compression_frequency().set_value(110 if a.get("on") else 0, FrequencyUnit.Per_min)
@@ -213,6 +219,9 @@ class SimSession:
             x.get_severity(eLungCompartment.RightLung).set_value(s)
             e.process_action(x)
         elif kind == "cvmod":
+            # Pulse resets any multiplier left out, so always send the full current set.
+            self.cvmods.update({k: float(v) for k, v in a.items() if k in ("svr", "sv", "hr", "venc", "pvr")})
+            a = dict(self.cvmods)
             m = SECardiovascularMechanicsModification()
             mods = m.get_modifiers()
             for k, getter in (("svr", mods.get_systemic_resistance_multiplier),
@@ -327,7 +336,14 @@ class SimSession:
         return d
 
     def _step(self):
-        self.engine.advance_time()
+        if self.dead:
+            return
+        if not self.engine.advance_time():
+            self.dead = True
+            self.paused = True
+            self.events.append(("team", "Pulse stopped: the patient reached an irreversible state. Restart the case.",
+                                "Pulse وقف: المريض وصل لحالة لا رجعة فيها. ابدأ الكيس من جديد."))
+            return
         self.t += DT
         d = self._pull()
         self.last = d
