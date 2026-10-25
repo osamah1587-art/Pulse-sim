@@ -1,0 +1,341 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="theme-color" content="#0c1317">
+<title>ICU ECMO Sim</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Sans+Arabic:wght@400;500;600&display=swap">
+<style>
+/* Layout: bedside monitor on top, case strip, ECMO console, control tabs + team chat, derived panels, debrief. Single dark monitor look by choice. */
+:root {
+  color-scheme: dark;
+  --bg: #0c1317; --panel: #121c21; --panel-2: #172329; --line: #24343c;
+  --fg: #d8e3e6; --muted: #8aa1a9; --accent: #5fb3c9; --accent-2: #b59cf5;
+  --ecg: #4ade80; --art: #f87171; --spo2: #67e8f9; --resp: #facc15; --cvp: #93a8ff; --ecmo: #fb923c;
+  --warn: #fb923c; --crit: #ef4444; --ok: #4ade80; --screen: #060a0c;
+  --f-num: "Barlow Condensed", "Roboto Condensed", "Arial Narrow", sans-serif;
+  --f-body: "IBM Plex Sans", "IBM Plex Sans Arabic", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-ar: "IBM Plex Sans Arabic", "IBM Plex Sans", system-ui, sans-serif;
+}
+* { box-sizing: border-box; }
+html,body{margin:0} body { background: var(--bg); color: var(--fg); font-family: var(--f-body); font-size: 14px; line-height: 1.45; }
+.wrap { max-width: 1200px; margin: 0 auto; padding-block: 14px 48px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: flex; flex-direction: column; gap: 14px; }
+header { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 6px 16px; }
+h1 { font-family: var(--f-num); font-weight: 700; font-size: 27px; letter-spacing: .02em; margin: 0; text-wrap: balance; }
+h1 span { color: var(--accent); }
+h1 sup { font-size: 13px; color: var(--accent-2); margin-left: 4px; letter-spacing: .06em; }
+h2 { font-family: var(--f-num); font-weight: 600; font-size: 20px; margin: 0; letter-spacing: .02em; }
+.ar { font-family: var(--f-ar); direction: rtl; unicode-bidi: isolate; text-align: start; }
+.sub { color: var(--muted); font-size: 13px; }
+.label { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.clockbox { display: flex; align-items: baseline; gap: 10px; font-family: var(--f-num); }
+.clock { font-size: 24px; font-variant-numeric: tabular-nums; }
+.casechip { font-size: 15px; color: var(--accent); }
+
+.monitor { background: var(--screen); border: 1px solid var(--line); border-radius: 10px; display: grid; grid-template-columns: minmax(0, 1fr) 280px; overflow: hidden; }
+.waves { position: relative; min-width: 0; border-right: 1px solid var(--line); }
+#waveCanvas { display: block; width: 100%; height: 330px; }
+.wlabels { position: absolute; inset: 0; pointer-events: none; display: grid; grid-template-rows: repeat(4, 1fr); }
+.wlabels div { padding: 4px 8px; font-family: var(--f-num); font-size: 13px; letter-spacing: .04em; }
+.nums { display: grid; grid-template-columns: 1fr 1fr; grid-auto-rows: minmax(74px, auto); }
+.num { padding: 8px 10px; border-bottom: 1px solid var(--line); border-left: 1px solid var(--line); display: flex; flex-direction: column; justify-content: space-between; min-width: 0; }
+.num.wide { grid-column: span 2; }
+.num .k { font-family: var(--f-num); font-size: 13px; letter-spacing: .06em; display: flex; justify-content: space-between; gap: 6px; }
+.num .v { font-family: var(--f-num); font-weight: 600; font-size: 40px; line-height: 1; font-variant-numeric: tabular-nums; text-align: right; }
+.num .v small { font-size: 20px; font-weight: 500; opacity: .85; }
+.num.alarm { background: color-mix(in srgb, var(--crit) 24%, transparent); animation: blink 1s steps(2) infinite; }
+.num.alarm-warn { background: color-mix(in srgb, var(--warn) 16%, transparent); }
+@keyframes blink { 50% { background: transparent; } }
+@media (prefers-reduced-motion: reduce) { .num.alarm, .econ.alarm { animation: none; } }
+.c-ecg { color: var(--ecg); } .c-art { color: var(--art); } .c-spo2 { color: var(--spo2); } .c-resp { color: var(--resp); } .c-cvp { color: var(--cvp); } .c-mut { color: var(--fg); } .c-ecmo { color: var(--ecmo); }
+
+.bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; }
+.group { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+button, select { font: inherit; font-weight: 500; color: var(--fg); background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 7px 12px; cursor: pointer; }
+button:hover:not(:disabled) { border-color: var(--accent); }
+button:disabled { opacity: .45; cursor: not-allowed; }
+button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button.on { background: color-mix(in srgb, var(--accent) 22%, var(--panel-2)); border-color: var(--accent); color: #eaf7fb; }
+button.primary { background: var(--accent); border-color: var(--accent); color: #062029; font-weight: 600; }
+button.ai { border-color: color-mix(in srgb, var(--accent-2) 60%, var(--line)); color: #e6dcff; }
+button.ai::before { content: "✦ "; color: var(--accent-2); }
+button.danger { border-color: color-mix(in srgb, var(--crit) 55%, var(--line)); }
+
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.row { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chips button small { color: var(--muted); font-size: 11px; margin-left: 4px; letter-spacing: .05em; text-transform: uppercase; }
+.brief { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+.brief p { margin: 0; }
+.objs { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.objs li { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 8px; align-items: start; font-size: 13.5px; }
+.objs .ic { width: 18px; height: 18px; border-radius: 50%; border: 1.5px solid var(--muted); margin-top: 1px; display: grid; place-items: center; font-size: 11px; font-weight: 700; }
+.objs li.met .ic { background: var(--ok); border-color: var(--ok); color: #052e16; }
+.objs li.late .ic { background: var(--warn); border-color: var(--warn); color: #3b1d06; }
+.objs li.fired .ic { background: var(--crit); border-color: var(--crit); color: #fff; }
+.objs li.pit .ic { border-style: dashed; border-color: var(--crit); }
+.objs li.na { opacity: .5; }
+.objs .when { font-family: var(--f-num); color: var(--muted); font-variant-numeric: tabular-nums; }
+.objs .ar { display: block; color: var(--muted); font-size: 12.5px; }
+.score { font-family: var(--f-num); font-size: 34px; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+.econ-wrap { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); background: var(--screen); border: 1px solid color-mix(in srgb, var(--ecmo) 40%, var(--line)); border-radius: 10px; overflow: hidden; }
+.econ { padding: 8px 10px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.econ .k { font-family: var(--f-num); font-size: 13px; letter-spacing: .05em; color: var(--muted); }
+.econ .v { font-family: var(--f-num); font-size: 30px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1; }
+.econ.alarm { background: color-mix(in srgb, var(--crit) 24%, transparent); animation: blink 1s steps(2) infinite; }
+.econ.head { grid-column: 1 / -1; flex-direction: row; justify-content: space-between; align-items: center; color: var(--ecmo); font-family: var(--f-num); font-size: 16px; letter-spacing: .06em; }
+.chatter { color: var(--crit); font-weight: 700; }
+
+.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); margin: -2px 0 2px; overflow-x: auto; }
+.tabs button { border: 0; background: none; border-bottom: 2px solid transparent; border-radius: 0; padding: 8px 10px; color: var(--muted); white-space: nowrap; }
+.tabs button.on { color: var(--fg); border-bottom-color: var(--accent); background: none; }
+.pane { display: flex; flex-direction: column; gap: 10px; }
+.ctl { display: grid; grid-template-columns: 128px minmax(0, 1fr) 76px; align-items: center; gap: 10px; }
+.ctl label { font-size: 13px; }
+.ctl output { font-family: var(--f-num); font-size: 18px; font-variant-numeric: tabular-nums; text-align: right; }
+input[type=range] { width: 100%; accent-color: var(--accent); }
+.btns { display: flex; flex-wrap: wrap; gap: 6px; }
+.hint { font-size: 12.5px; color: var(--muted); margin: 0; }
+
+.chat { display: flex; flex-direction: column; gap: 8px; max-height: 340px; overflow-y: auto; padding-right: 2px; }
+.msg { padding: 8px 10px; border-radius: 8px; font-size: 13.5px; max-width: 92%; white-space: pre-wrap; overflow-wrap: anywhere; }
+.msg.me { align-self: flex-end; background: color-mix(in srgb, var(--accent) 20%, var(--panel-2)); }
+.msg.ai { align-self: flex-start; background: var(--panel-2); border: 1px solid color-mix(in srgb, var(--accent-2) 35%, var(--line)); }
+.msg.team { align-self: flex-start; background: color-mix(in srgb, var(--warn) 12%, var(--panel-2)); border: 1px solid color-mix(in srgb, var(--warn) 35%, var(--line)); }
+.msg.find { align-self: stretch; max-width: 100%; background: color-mix(in srgb, var(--cvp) 10%, var(--panel-2)); border: 1px solid color-mix(in srgb, var(--cvp) 30%, var(--line)); }
+.msg .who { display: block; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin-bottom: 2px; font-weight: 600; }
+.chatin { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; }
+textarea, input[type=text] { font: inherit; color: var(--fg); background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; width: 100%; resize: vertical; }
+
+.kv { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px 12px; }
+.kv div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.kv b { font-family: var(--f-num); font-weight: 600; font-size: 22px; font-variant-numeric: tabular-nums; }
+.kv b.bad { color: var(--crit); } .kv b.warn { color: var(--warn); }
+.kv small { font-size: 13px; font-weight: 500; color: var(--muted); }
+canvas.plot { width: 100%; height: 230px; display: block; }
+.log { max-height: 200px; overflow-y: auto; font-size: 13px; display: flex; flex-direction: column; gap: 4px; }
+.log div { display: grid; grid-template-columns: 52px minmax(0,1fr); gap: 8px; }
+.log span:first-child { font-family: var(--f-num); color: var(--muted); font-variant-numeric: tabular-nums; }
+.md h4 { font-family: var(--f-num); font-size: 18px; font-weight: 600; margin: 14px 0 4px; color: var(--accent); letter-spacing: .02em; }
+.md p { margin: 4px 0; max-width: 75ch; }
+.md ul { margin: 4px 0; padding-inline-start: 20px; }
+.md li { margin: 2px 0; }
+.md [dir=rtl] { font-family: var(--f-ar); }
+.thinking { color: var(--muted); font-style: italic; }
+.ai-off { font-size: 12.5px; color: var(--muted); border: 1px dashed var(--line); padding: 8px 10px; border-radius: 8px; }
+footer { color: var(--muted); font-size: 12.5px; display: flex; flex-direction: column; gap: 6px; max-width: 80ch; }
+
+@media (max-width: 860px) {
+  .monitor { grid-template-columns: 1fr; }
+  .waves { border-right: 0; border-bottom: 1px solid var(--line); }
+  #waveCanvas { height: 250px; }
+  .nums { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .num.wide { grid-column: span 3; }
+  .num .v { font-size: 32px; }
+  .row, .brief { grid-template-columns: 1fr; }
+  .econ-wrap { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 440px) {
+  .ctl { grid-template-columns: 96px minmax(0, 1fr) 62px; gap: 8px; }
+  .kv { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .nums { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .num.wide { grid-column: span 2; }
+  .econ .v { font-size: 26px; }
+}
+</style>
+</head><body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>ICU ECMO <span>Sim</span><sup>Pulse 4.4</sup></h1>
+      <div class="sub ar">محرك Pulse 4.4 الأصلي — مونيتور حي، وفنتيليتور، وأدوية، وECMO، وClaude جوه الكيس</div>
+    </div>
+    <div class="clockbox"><span class="casechip" id="caseName">Free play</span><span class="clock" id="clock">00:00</span><span class="label" id="conn">connecting…</span></div>
+  </header>
+
+  <section class="monitor" aria-label="Patient monitor">
+    <div class="waves">
+      <canvas id="waveCanvas"></canvas>
+      <div class="wlabels">
+        <div class="c-ecg">II</div>
+        <div class="c-art">ART <span style="opacity:.7">0–160</span></div>
+        <div class="c-spo2">PLETH <span style="opacity:.7">R hand</span></div>
+        <div class="c-resp">Paw <span style="opacity:.7">0–40 cmH₂O</span></div>
+      </div>
+    </div>
+    <div class="nums">
+      <div class="num c-ecg" id="n-hr"><div class="k"><span>HR</span><span>bpm</span></div><div class="v" id="v-hr">--</div></div>
+      <div class="num c-spo2" id="n-spo2"><div class="k"><span>SpO₂ R</span><span>%</span></div><div class="v" id="v-spo2">--</div></div>
+      <div class="num wide c-art" id="n-abp"><div class="k"><span>ABP</span><span>mmHg</span></div><div class="v" id="v-abp">--</div></div>
+      <div class="num c-cvp" id="n-cvp"><div class="k"><span>CVP</span><span>mmHg</span></div><div class="v" id="v-cvp">--</div></div>
+      <div class="num c-resp" id="n-et"><div class="k"><span>EtCO₂/RR</span></div><div class="v" id="v-et">--</div></div>
+      <div class="num c-mut" id="n-co"><div class="k"><span>CO</span><span>L/min</span></div><div class="v" id="v-co">--</div></div>
+      <div class="num c-resp" id="n-ppeak"><div class="k"><span>Ppk/Pplat</span></div><div class="v" id="v-paw">--</div></div>
+    </div>
+  </section>
+
+  <section class="econ-wrap" id="ecmoConsole" hidden aria-label="ECMO console">
+    <div class="econ head"><span id="ecmoMode">VV ECMO</span><span id="ecmoChatter"></span></div>
+    <div class="econ"><span class="k">RPM</span><span class="v c-ecmo" id="e-rpm">--</span></div>
+    <div class="econ" id="ec-flow"><span class="k">Flow L/min</span><span class="v c-ecmo" id="e-flow">--</span></div>
+    <div class="econ" id="ec-pven"><span class="k">P ven</span><span class="v" id="e-pven">--</span></div>
+    <div class="econ"><span class="k">P pre-oxy</span><span class="v" id="e-pint">--</span></div>
+    <div class="econ"><span class="k">P post-oxy</span><span class="v" id="e-part">--</span></div>
+    <div class="econ" id="ec-dp"><span class="k">ΔP oxy</span><span class="v" id="e-dp">--</span></div>
+    <div class="econ"><span class="k">Sweep / FdO₂</span><span class="v" id="e-sweep">--</span></div>
+    <div class="econ"><span class="k">Outlet sat</span><span class="v" id="e-post">--</span></div>
+    <div class="econ"><span class="k">Inlet sat</span><span class="v c-spo2" id="e-spo2">--</span></div>
+    <div class="econ"><span class="k">Membrane O₂</span><span class="v" id="e-frac">--</span></div>
+    <div class="econ"><span class="k">Membrane CO₂</span><span class="v" id="e-rec">--</span></div>
+    <div class="econ" hidden><span class="v" id="e-svo2">--</span></div>
+  </section>
+
+  <div class="bar">
+    <div class="group">
+      <button id="btnPlay" class="on">Pause</button>
+      <span class="label" style="margin-left:6px">Speed</span>
+      <button data-speed="1" class="on">×1</button>
+      <button data-speed="5">×5</button>
+      <button data-speed="20">×20</button>
+    </div>
+    <div class="group">
+      <button id="btnReset">Restart case</button>
+      <button id="btnEnd" class="danger">End case</button>
+    </div>
+  </div>
+
+  <section class="card" aria-label="Case">
+    <div class="bar"><span class="label">Case · الكيس</span><span class="label" id="caseTimer"></span></div>
+    <div class="chips" id="chips"></div>
+    <div class="brief"><p id="briefEn"></p><p class="ar" id="briefAr"></p></div>
+    <ul class="objs" id="objs"></ul>
+  </section>
+
+  <div class="row">
+    <section class="card" aria-label="Controls">
+      <div class="tabs" role="tablist" id="ctlTabs">
+        <button class="on" data-tab="vent">Ventilator</button>
+        <button data-tab="hemo">Drugs &amp; fluids</button>
+        <button data-tab="ecmo">ECMO</button>
+        <button data-tab="act">Procedures</button>
+        <button data-tab="pt" id="tabPt">Patient</button>
+      </div>
+      <div class="pane" data-pane="vent">
+        <div class="btns"><button data-vmode="VC" class="on">Volume control</button><button data-vmode="PC">Pressure control</button></div>
+        <div class="ctl"><label for="sPeep">PEEP</label><input type="range" id="sPeep" min="0" max="24" step="1"><output id="oPeep"></output></div>
+        <div class="ctl"><label for="sFio2">FiO₂</label><input type="range" id="sFio2" min="0.21" max="1" step="0.01"><output id="oFio2"></output></div>
+        <div class="ctl" id="rowVt"><label for="sVt">Tidal volume</label><input type="range" id="sVt" min="150" max="900" step="10"><output id="oVt"></output></div>
+        <div class="ctl" id="rowPinsp" hidden><label for="sPinsp">P insp</label><input type="range" id="sPinsp" min="5" max="40" step="1"><output id="oPinsp"></output></div>
+        <div class="ctl"><label for="sRr">Rate</label><input type="range" id="sRr" min="6" max="35" step="1"><output id="oRr"></output></div>
+        <p class="hint">Assist-control, I:E 1:2. PBW 70 kg, so 6 ml/kg is 420 ml. Changes apply when you release the slider.</p>
+      </div>
+      <div class="pane" data-pane="hemo" hidden>
+        <div class="ctl"><label for="sNe">Norepinephrine</label><input type="range" id="sNe" min="0" max="1" step="0.02"><output id="oNe"></output></div>
+        <div class="ctl"><label for="sEpi">Epinephrine</label><input type="range" id="sEpi" min="0" max="0.5" step="0.01"><output id="oEpi"></output></div>
+        <div class="ctl"><label for="sDobu">Dobutamine</label><input type="range" id="sDobu" min="0" max="20" step="1"><output id="oDobu"></output></div>
+        <div class="ctl"><label for="sVaso">Vasopressin</label><input type="range" id="sVaso" min="0" max="0.06" step="0.01"><output id="oVaso"></output></div>
+        <p class="hint">Catecholamines in mcg/kg/min, vasopressin in units/min. Pulse handles uptake, effect and clearance.</p>
+        <div class="btns">
+          <button id="bFluid">Saline 500 ml</button>
+          <button id="bRl">Ringer's 500 ml</button>
+          <button id="bPrbc">PRBC 1 unit</button>
+          <button id="bAbx">Antibiotics</button>
+        </div>
+      </div>
+      <div class="pane" data-pane="ecmo" hidden>
+        <div class="btns" id="ecmoStartBtns">
+          <button id="bCanVV">Cannulate VV</button>
+          <button id="bCanVA">Cannulate VA</button>
+        </div>
+        <div class="ctl"><label for="sRpm">Pump speed</label><input type="range" id="sRpm" min="0" max="5000" step="50"><output id="oRpm"></output></div>
+        <div class="ctl"><label for="sSweep">Sweep gas</label><input type="range" id="sSweep" min="0" max="10" step="0.5"><output id="oSweep"></output></div>
+        <div class="ctl"><label for="sFdo2">FdO₂</label><input type="range" id="sFdo2" min="0.21" max="1" step="0.01"><output id="oFdo2"></output></div>
+        <div class="btns"><button id="bRepos">Reposition drainage cannula (echo-guided)</button><button id="bStopEcmo" class="danger">Stop ECMO</button></div>
+        <p class="hint">Cannulation takes about 90 s. The centrifugal pump flow depends on preload: when the IVC collapses, flow falls and Pven goes more negative.</p>
+      </div>
+      <div class="pane" data-pane="act" hidden>
+        <span class="label">Diagnostics</span>
+        <div class="btns">
+          <button id="bEcho">Bedside echo</button>
+          <button id="bCircuit">Inspect circuit &amp; cannula</button>
+          <button id="bExam">Examine patient</button>
+          <button id="bAbg">Send ABG</button>
+        </div>
+        <span class="label">Treatment</span>
+        <div class="btns">
+          <button id="bSource">Source / bleeding control</button>
+          <button id="bNeedle">Needle decompression</button>
+          <button id="bPeri">Pericardiocentesis</button>
+          <button id="bCpr">Start CPR</button>
+          <button id="bShock">Defibrillate</button>
+        </div>
+        <p class="hint">Findings appear in the team panel. Surgical source control takes about 3 min, a cannula site about 1 min.</p>
+      </div>
+      <div class="pane" data-pane="pt" hidden>
+        <div class="ctl"><label for="sBleed">Bleeding</label><input type="range" id="sBleed" min="0" max="300" step="10"><output id="oBleed"></output></div>
+        <div class="ctl"><label for="sSvMul">Stroke volume</label><input type="range" id="sSvMul" min="0.2" max="1.5" step="0.05"><output id="oSvMul"></output></div>
+        <div class="ctl"><label for="sSvrMul">SVR</label><input type="range" id="sSvrMul" min="0.25" max="2" step="0.05"><output id="oSvrMul"></output></div>
+        <div class="ctl"><label for="sArds">ARDS severity</label><input type="range" id="sArds" min="0" max="0.95" step="0.05"><output id="oArds"></output></div>
+        <div class="ctl"><label for="sEff">Pericardial effusion</label><input type="range" id="sEff" min="0" max="100" step="5"><output id="oEff"></output></div>
+        <div class="btns">
+          <button id="bTension">Right tension pneumothorax</button>
+          <select id="selRhythm" aria-label="Rhythm"><option value="">Set rhythm…</option><option>NormalSinus</option><option>SinusBradycardia</option><option>SinusTachycardia</option><option>StableVentricularTachycardia</option><option>PulselessVentricularTachycardia</option><option>CoarseVentricularFibrillation</option><option>FineVentricularFibrillation</option><option>Asystole</option><option>SinusPulselessElectricalActivity</option></select>
+        </div>
+        <p class="hint">Free play only. Bleeding in ml/min into the abdomen; effusion in ml/min; multipliers are relative to normal.</p>
+      </div>
+    </section>
+
+    <section class="card" aria-label="Team">
+      <div class="bar"><span class="label">Bedside team · Claude</span>
+        <select id="aiLang" aria-label="AI language"><option value="ar">مصري</option><option value="en">English</option><option value="both">Both</option></select>
+      </div>
+      <div class="chat" id="chat"></div>
+      <div id="aiBox">
+        <div class="chatin">
+          <input type="text" id="chatIn" placeholder="Ask the nurse or perfusionist… / اسأل الممرضة">
+          <button id="chatSend" class="ai">Ask</button>
+        </div>
+        <div class="btns" style="margin-top:8px"><button id="bHint" class="ai">Consultant hint</button><button id="chatStop" hidden>Stop</button></div>
+      </div>
+      <p class="ai-off" id="aiOff" hidden>Claude is off: no API key on the server. Everything else works.</p>
+    </section>
+  </div>
+
+  <div class="row">
+    <section class="card">
+      <div class="tabs" id="plotTabs"><button class="on" data-plot="pv">PV loop</button><button data-plot="trend">Trends</button></div>
+      <canvas class="plot" id="plotCanvas"></canvas>
+      <p class="hint" id="plotHint">LV pressure–volume loop, last 5 beats.</p>
+    </section>
+    <section class="card">
+      <div class="bar"><span class="label">Arterial blood gas</span><span class="label" id="abgAge"></span></div>
+      <div class="kv" id="abg"></div>
+      <span class="label">Haemodynamics · mechanics</span>
+      <div class="kv" id="adv"></div>
+    </section>
+  </div>
+
+  <section class="card" id="resultCard" hidden>
+    <div class="bar"><h2>Case result</h2><span class="score" id="scoreBig"></span></div>
+    <div class="btns"><button id="bDebrief" class="ai primary">Debrief with Claude</button><button id="bDebriefStop" hidden>Stop</button></div>
+    <div class="md" id="debrief"></div>
+  </section>
+
+  <section class="card">
+    <span class="label">Create a case with Claude · اعمل كيس بـ Claude</span>
+    <textarea id="genIn" rows="2" placeholder="e.g. 72-year-old with upper GI bleed and cirrhosis, on noradrenaline, then develops ARDS — or اكتب بالعربي"></textarea>
+    <div class="btns"><button id="bGen" class="ai">Generate case</button><span class="hint" id="genStatus"></span></div>
+  </section>
+
+  <section class="card">
+    <span class="label">Event log</span>
+    <div class="log" id="log"></div>
+  </section>
+
+  <footer>
+    <p>Physiology by the <a href="https://pulse.kitware.com" style="color:var(--accent)">Pulse Physiology Engine</a> 4.4 (Kitware, Apache 2.0). The ECMO pump-head and drainage-collapse behaviour is an added teaching layer, because Pulse models the pump as an ideal flow source. Teaching use only, not for clinical decisions.</p>
+    <p class="ar">للتعليم بس، مش للقرارات الإكلينيكية.</p>
+  </footer>
+</div>
+
+<script src="/static/cases.js"></script>
+<script src="/static/app.js"></script>
+</body></html>

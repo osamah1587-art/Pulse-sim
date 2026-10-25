@@ -1,0 +1,22 @@
+# Cloud server: HTTPS on https://$DOMAIN with an access code
+services:
+  bridge:
+    build: .
+    image: pulse-sim
+    env_file: .env
+    restart: unless-stopped
+  caddy:
+    image: caddy:2
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - DOMAIN=${DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+    depends_on:
+      - bridge
+    restart: unless-stopped
+volumes:
+  caddy_data:

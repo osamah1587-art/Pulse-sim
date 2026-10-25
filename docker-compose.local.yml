@@ -1,0 +1,13 @@
+# Laptop test: open http://localhost:8080  (no access code, no HTTPS)
+services:
+  bridge:
+    build: .
+    image: pulse-sim
+    ports:
+      - "8080:8000"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      - ACCESS_CODE=
+    restart: unless-stopped
