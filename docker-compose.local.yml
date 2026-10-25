@@ -10,4 +10,8 @@ services:
         required: false
     environment:
       - ACCESS_CODE=
+    # Live code from this folder: after `git pull`, restart with `up --no-build` (no rebuild needed)
+    volumes:
+      - ./web:/app/web:ro
+      - ./bridge:/app/bridge:ro
     restart: unless-stopped

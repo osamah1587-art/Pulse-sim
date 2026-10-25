@@ -15,6 +15,8 @@
   --f-ar: "IBM Plex Sans Arabic", "IBM Plex Sans", system-ui, sans-serif;
 }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
+.ar { display: none !important; }
 html,body{margin:0} body { background: var(--bg); color: var(--fg); font-family: var(--f-body); font-size: 14px; line-height: 1.45; }
 .wrap { max-width: 1200px; margin: 0 auto; padding-block: 14px 48px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: flex; flex-direction: column; gap: 14px; }
 header { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 6px 16px; }
@@ -62,7 +64,7 @@ button.danger { border-color: color-mix(in srgb, var(--crit) 55%, var(--line)); 
 .row { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 14px; align-items: start; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .chips button small { color: var(--muted); font-size: 11px; margin-left: 4px; letter-spacing: .05em; text-transform: uppercase; }
-.brief { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+.brief { display: block; max-width: 90ch; }
 .brief p { margin: 0; }
 .objs { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .objs li { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 8px; align-items: start; font-size: 13.5px; }
@@ -146,7 +148,7 @@ footer { color: var(--muted); font-size: 12.5px; display: flex; flex-direction: 
   <header>
     <div>
       <h1>ICU ECMO <span>Sim</span><sup>Pulse 4.4</sup></h1>
-      <div class="sub ar">محرك Pulse 4.4 الأصلي — مونيتور حي، وفنتيليتور، وأدوية، وECMO، وClaude جوه الكيس</div>
+      <div class="sub">Kitware Pulse 4.4 engine: live monitor, ventilator, drugs, ECMO, and Claude at the bedside</div>
     </div>
     <div class="clockbox"><span class="casechip" id="caseName">Free play</span><span class="clock" id="clock">00:00</span><span class="label" id="conn">connecting…</span></div>
   </header>
@@ -203,9 +205,9 @@ footer { color: var(--muted); font-size: 12.5px; display: flex; flex-direction: 
   </div>
 
   <section class="card" aria-label="Case">
-    <div class="bar"><span class="label">Case · الكيس</span><span class="label" id="caseTimer"></span></div>
+    <div class="bar"><span class="label">Case</span><span class="label" id="caseTimer"></span></div>
     <div class="chips" id="chips"></div>
-    <div class="brief"><p id="briefEn"></p><p class="ar" id="briefAr"></p></div>
+    <div class="brief"><p id="briefEn"></p><p id="briefAr" hidden></p></div>
     <ul class="objs" id="objs"></ul>
   </section>
 
@@ -285,12 +287,12 @@ footer { color: var(--muted); font-size: 12.5px; display: flex; flex-direction: 
 
     <section class="card" aria-label="Team">
       <div class="bar"><span class="label">Bedside team · Claude</span>
-        <select id="aiLang" aria-label="AI language"><option value="ar">مصري</option><option value="en">English</option><option value="both">Both</option></select>
+        <select id="aiLang" aria-label="AI language" hidden><option value="en">English</option></select>
       </div>
       <div class="chat" id="chat"></div>
       <div id="aiBox">
         <div class="chatin">
-          <input type="text" id="chatIn" placeholder="Ask the nurse or perfusionist… / اسأل الممرضة">
+          <input type="text" id="chatIn" placeholder="Ask the nurse or perfusionist…">
           <button id="chatSend" class="ai">Ask</button>
         </div>
         <div class="btns" style="margin-top:8px"><button id="bHint" class="ai">Consultant hint</button><button id="chatStop" hidden>Stop</button></div>
@@ -320,8 +322,8 @@ footer { color: var(--muted); font-size: 12.5px; display: flex; flex-direction: 
   </section>
 
   <section class="card">
-    <span class="label">Create a case with Claude · اعمل كيس بـ Claude</span>
-    <textarea id="genIn" rows="2" placeholder="e.g. 72-year-old with upper GI bleed and cirrhosis, on noradrenaline, then develops ARDS — or اكتب بالعربي"></textarea>
+    <span class="label">Create a case with Claude</span>
+    <textarea id="genIn" rows="2" placeholder="e.g. 72-year-old with upper GI bleed and cirrhosis, on noradrenaline, then develops ARDS"></textarea>
     <div class="btns"><button id="bGen" class="ai">Generate case</button><span class="hint" id="genStatus"></span></div>
   </section>
 
@@ -332,7 +334,7 @@ footer { color: var(--muted); font-size: 12.5px; display: flex; flex-direction: 
 
   <footer>
     <p>Physiology by the <a href="https://pulse.kitware.com" style="color:var(--accent)">Pulse Physiology Engine</a> 4.4 (Kitware, Apache 2.0). The ECMO pump-head and drainage-collapse behaviour is an added teaching layer, because Pulse models the pump as an ideal flow source. Teaching use only, not for clinical decisions.</p>
-    <p class="ar">للتعليم بس، مش للقرارات الإكلينيكية.</p>
+    
   </footer>
 </div>
 

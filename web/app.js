@@ -6,11 +6,12 @@ const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;",
 const isAr = s => /[؀-ۿ]/.test(s);
 const num = (x, d = 0) => (x == null || !isFinite(x) ? "--" : Number(x).toFixed(d));
 
-let lang = "ar"; try { lang = localStorage.getItem("physio.lang") || "ar"; } catch (e) {}
+const lang = "en";
 $("aiLang").value = lang;
-$("aiLang").onchange = () => { lang = $("aiLang").value; try { localStorage.setItem("physio.lang", lang); } catch (e) {} };
+
 
 // ---------- state ----------
+let firstFrame = true;
 let ws = null, caseKey = "free", def = CASES.free, V = null, ended = false, running = true, speed = 1;
 let C = null; // per-case page state
 let aiOn = false;
@@ -58,19 +59,18 @@ function startCase(key) {
   caseKey = key; def = CASES[key]; C = newCaseState(); ended = false; running = true; V = null;
   $("btnPlay").textContent = "Pause"; $("btnPlay").classList.add("on");
   document.querySelectorAll("#chips button").forEach(b => b.classList.toggle("on", b.dataset.k === key));
-  $("caseName").textContent = def.title; $("briefEn").textContent = def.brief; $("briefAr").textContent = def.briefAr || "";
+  $("caseName").textContent = def.title; $("briefEn").textContent = def.brief;
   $("log").textContent = ""; $("chat").textContent = ""; $("resultCard").hidden = true; $("debrief").textContent = "";
   $("tabPt").hidden = !def.sandbox;
   if (!def.sandbox && document.querySelector("#ctlTabs button.on")?.dataset.tab === "pt") selectTab("vent");
-  pvHist = []; samples = []; clearWaves(); renderObjs();
-  chatMsg("team", "Team", lang === "en" ? "Handover: " + def.brief : (def.briefAr || def.brief));
+  pvHist = []; samples = []; firstFrame = true; clearWaves(); renderObjs();
+  chatMsg("team", "Team", "Handover: " + def.brief);
   log("Case loaded: " + def.title);
   send({ type: "start", case: key, speed });
 }
 for (const k in CASES) { const b = document.createElement("button"); b.dataset.k = k; b.innerHTML = esc(CASES[k].title) + "<small>" + esc(CASES[k].tag) + "</small>"; b.onclick = () => startCase(k); $("chips").append(b); }
 
 // ---------- frames ----------
-let firstFrame = true;
 function onFrame(m) {
   V = m.v;
   if (m.case && m.case.flags) Object.assign(C.F, m.case.flags);
