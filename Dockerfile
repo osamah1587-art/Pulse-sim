@@ -14,13 +14,8 @@ RUN mkdir /build && cd /build && \
     cmake -DCMAKE_INSTALL_PREFIX=/pulse -DCMAKE_BUILD_TYPE:STRING=Release /source && \
     make -j${MAKE_JOBS} && rm -rf /build /source
 
-# ---------- Stage 2: runtime ----------
-FROM ubuntu:24.04
-RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends python3 ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
-COPY --from=build /opt/venv /opt/venv
-COPY --from=build /pulse /pulse
-ENV PATH="/opt/venv/bin:$PATH" PYTHONPATH="/pulse/bin:/pulse/python:/app/bridge" PULSE_BIN=/pulse/bin WEB_DIR=/app/web
+# ---------- App layer (same stage: avoids a large cross-stage COPY that crashes some Docker Desktop builds) ----------
+ENV PYTHONPATH="/pulse/bin:/pulse/python:/app/bridge" PULSE_BIN=/pulse/bin WEB_DIR=/app/web
 COPY bridge/requirements.txt /app/bridge/requirements.txt
 RUN pip install --no-cache-dir -r /app/bridge/requirements.txt
 COPY bridge /app/bridge
