@@ -105,8 +105,9 @@ class Pump:
         self.flow = 0.0
         self.pven = 0.0
 
-    def update(self, cvp, ret_p, t, dt):
-        target = (3.0 * ((4.0 - cvp) / 2.0) ** 2 if cvp < 4 else 0.0) + max(0.0, self.rd_mul - 1.6) * 0.7
+    def update(self, cvp, ret_p, t, dt, drain_p=None):
+        # Collapse thresholds tuned to Pulse: CVP on VV ECMO sits around 3 mmHg in this patient.
+        target = (3.0 * ((2.5 - cvp) / 1.2) ** 2 if cvp < 2.5 else 0.0) + max(0.0, self.rd_mul - 1.6) * 0.7
         target = min(40.0, target)
         self.collapse += (target - self.collapse) * min(1.0, dt / 0.3)
         rd = 15.0 * self.rd_mul * (1.0 + self.collapse)
@@ -114,12 +115,15 @@ class Pump:
         if self.collapse > 0.6:
             q *= 1.0 - min(0.45, 0.06 * self.collapse) * (0.5 + 0.5 * math.sin(2 * math.pi * 1.4 * t))
         self.flow = q
-        self.pven = cvp - q * rd
+        # Drainage pressure: Pulse's own value (cannula + limb resistance, including malposition),
+        # plus the extra suction a collapsing vessel adds, which Pulse's linear circuit cannot produce.
+        base = drain_p if drain_p is not None else cvp - q * 9.5 * self.rd_mul
+        self.pven = base - q * 15.0 * self.collapse
         return q
 
 
 class SimSession:
-    def __init__(self, state_file="StandardMale@0s.json", speed=1.0):
+    def __init__(self, state_file="Ventilated@0s.json", speed=1.0):
         self.engine = PulseEngine(data_root_dir=PULSE_BIN + "/")
         self.drm = SEDataRequestManager([r for _, r in REQ])
         self.actions = queue.Queue()
@@ -131,11 +135,12 @@ class SimSession:
         self.last = {}
         self.wave = []
         self.vent = {"mode": "VC", "peep": 5, "fio2": 0.4, "vt": 480, "rr": 14, "pinsp": 15}
-        self.drugs = {"ne": 0.0, "dobu": 0.0, "epi": 0.0, "vaso": 0.0}
+        self.drugs = {"ne": 0.0, "epi": 0.0, "phenyl": 0.0, "vaso": 0.0}
         self.ecmo = {"on": False, "mode": "VV", "sweep": 4.0, "fdo2": 1.0}
         self.pump = Pump()
         self._ecmo_cfg = None
         self._last_flow_set = -1.0
+        self._pump_acc = 0.0
         self.events = []
         self.weight = 70.0
         ok = self.engine.serialize_from_file(os.path.join(PULSE_BIN, "states", state_file), self.drm)
@@ -237,7 +242,7 @@ class SimSession:
             self.ecmo["on"] = False
             self._send_ecmo(force=True)
         elif kind == "speed":
-            self.speed = max(0.25, min(20.0, float(a["value"])))
+            self.speed = max(0.25, min(8.0, float(a["value"])))
         elif kind == "pause":
             self.paused = bool(a.get("value", True))
 
@@ -266,7 +271,7 @@ class SimSession:
     DRUGS = {  # ui name -> (Pulse substance, concentration ug/mL)
         "ne": ("Norepinephrine", 16.0),
         "epi": ("Epinephrine", 16.0),
-        "dobu": ("Dobutamine", 1000.0),
+        "phenyl": ("Phenylephrine", 100.0),
         "vaso": ("Vasopressin", 0.4),
     }
 
@@ -281,19 +286,30 @@ class SimSession:
         self.engine.process_action(inf)
 
     def _send_ecmo(self, force=False):
+        """Validated Quadrox PLS + RotaFlow circuit from Pulse's Schmidt et al. digital twins."""
+        from pulse.cdm.scalars import VolumePerTimePressureUnit
         cfg = SEExtracorporealMembraneOxygenationDeviceConfiguration()
         st = cfg.get_settings()
-        if not self.ecmo["on"]:
-            st.get_pump_flow().set_value(0.0, VolumePerTimeUnit.L_Per_min)
-            st.get_sweep_gas_flow().set_value(0.0, VolumePerTimeUnit.L_Per_min)
-            self.engine.process_action(cfg)
-            return
-        st.set_inlet_location(Cannula.RightFemoralVein)
-        st.set_outlet_location(Cannula.InternalJugular if self.ecmo["mode"] == "VV" else Cannula.RightFemoralArtery)
-        st.get_pump_flow().set_value(max(0.0, self.pump.flow), VolumePerTimeUnit.L_Per_min)
-        st.get_sweep_gas_flow().set_value(self.ecmo["sweep"], VolumePerTimeUnit.L_Per_min)
+        st.set_inlet_location(Cannula.InferiorVenaCava)
+        st.set_outlet_location(Cannula.RightAtrium if self.ecmo["mode"] == "VV" else Cannula.RightFemoralArtery)
+        on = self.ecmo["on"]
+        st.get_pump_flow().set_value(max(0.0, self.pump.flow) if on else 0.0, VolumePerTimeUnit.L_Per_min)
+        st.get_sweep_gas_flow().set_value(self.ecmo["sweep"] if on else 0.0, VolumePerTimeUnit.L_Per_min)
         st.get_fraction_of_inspired_oxygen().set_value(self.ecmo["fdo2"])
-        st.get_drainage_cannula_resistance().set_value(0.05 * self.pump.rd_mul, PressureTimePerVolumeUnit.mmHg_s_Per_mL)
+        st.get_oxygen_membrane_diffusing_capacity().set_value(0.53, VolumePerTimePressureUnit.mL_Per_min_mmHg)
+        st.get_carbon_dioxide_membrane_diffusing_capacity().set_value(14.0, VolumePerTimePressureUnit.mL_Per_min_mmHg)
+        st.get_supply_pressure().set_value(0.0, PressureUnit.mmHg)
+        for getter, ml in ((st.get_pump_volume, 32), (st.get_oxygenator_liquid_volume, 250), (st.get_oxygenator_gas_volume, 215),
+                           (st.get_infuser_volume, 0.01), (st.get_drainage_cannula_volume, 18), (st.get_return_cannula_volume, 4),
+                           (st.get_drainage_limb_volume, 71), (st.get_return_limb_volume, 71), (st.get_inlet_probe_volume, 5),
+                           (st.get_outlet_probe_volume, 5)):
+            getter().set_value(ml, VolumeUnit.mL)
+        U = PressureTimePerVolumeUnit.mmHg_min_Per_L
+        st.get_drainage_cannula_resistance().set_value(8.0 * self.pump.rd_mul, U)
+        st.get_return_cannula_resistance().set_value(22.0, U)
+        st.get_drainage_limb_resistance().set_value(1.5, U)
+        st.get_return_limb_resistance().set_value(1.5, U)
+        st.get_oxygenator_resistance().set_value(10.0, U)
         self.engine.process_action(cfg)
         self._last_flow_set = self.pump.flow
 
@@ -310,13 +326,38 @@ class SimSession:
                          collapse=p.collapse, rdMul=p.rd_mul)
         return d
 
+    def _step(self):
+        self.engine.advance_time()
+        self.t += DT
+        d = self._pull()
+        self.last = d
+        r2 = lambda x: None if x is None else round(x, 2)
+        self.wave.append((round(self.t, 2), r2(d.get("ecg")), r2(d.get("abp")), r2(d.get("paw")), r2(d.get("cvpInst")), r2(d.get("lvV")), r2(d.get("lvP"))))
+        self._pump_acc += DT
+        if self.ecmo["on"] and self._pump_acc >= 0.1:
+            ret = d.get("map") if self.ecmo["mode"] == "VA" else d.get("cvp")
+            self.pump.update(d.get("cvp") if d.get("cvp") is not None else 5.0, ret if ret is not None else 5.0, self.t, self._pump_acc, d.get("eDrain") if d.get("eFlow") else None)
+            if abs(self.pump.flow - self._last_flow_set) > 0.05:
+                self._send_ecmo()
+            self._pump_acc = 0.0
+
+    def run_fast(self, seconds, tick=None):
+        """Synchronous stepping without real-time pacing (setup and tests)."""
+        n = int(round(seconds / DT))
+        for i in range(n):
+            while not self.actions.empty():
+                self._apply(self.actions.get_nowait())
+            self._step()
+            if tick and i % 12 == 0:
+                tick()
+        self.wave = []
+
     def run(self):
         self.running = True
         self._send_vent()
         wall = time.monotonic()
         sim_budget = 0.0
         last_frame = time.monotonic()
-        pump_acc = 0.0
         while self.running:
             now = time.monotonic()
             dt_wall = min(0.25, now - wall)
@@ -329,23 +370,12 @@ class SimSession:
             if self.paused:
                 time.sleep(0.05)
                 continue
-            sim_budget += dt_wall * self.speed
+            sim_budget = min(sim_budget + dt_wall * self.speed, 1.0)
             steps = 0
             while sim_budget >= DT and steps < 400:
-                self.engine.advance_time()
-                self.t += DT
+                self._step()
                 sim_budget -= DT
                 steps += 1
-                d = self._pull()
-                self.last = d
-                self.wave.append((round(self.t, 3), d.get("ecg"), d.get("abp"), d.get("paw"), d.get("cvpInst"), d.get("lvV"), d.get("lvP")))
-                pump_acc += DT
-                if self.ecmo["on"] and pump_acc >= 0.1:
-                    ret = d.get("map") if self.ecmo["mode"] == "VA" else d.get("cvp")
-                    self.pump.update(d.get("cvp") or 5.0, ret or 5.0, self.t, pump_acc)
-                    if abs(self.pump.flow - self._last_flow_set) > 0.05:
-                        self._send_ecmo()
-                    pump_acc = 0.0
             if now - last_frame >= 0.2:
                 last_frame = now
                 frame = {"wave": self.wave, "v": self.snapshot(), "events": self.events}

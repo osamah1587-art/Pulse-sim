@@ -230,12 +230,12 @@ footer { color: var(--muted); font-size: 12.5px; display: flex; flex-direction: 
       <div class="pane" data-pane="hemo" hidden>
         <div class="ctl"><label for="sNe">Norepinephrine</label><input type="range" id="sNe" min="0" max="1" step="0.02"><output id="oNe"></output></div>
         <div class="ctl"><label for="sEpi">Epinephrine</label><input type="range" id="sEpi" min="0" max="0.5" step="0.01"><output id="oEpi"></output></div>
-        <div class="ctl"><label for="sDobu">Dobutamine</label><input type="range" id="sDobu" min="0" max="20" step="1"><output id="oDobu"></output></div>
+        <div class="ctl"><label for="sPhenyl">Phenylephrine</label><input type="range" id="sPhenyl" min="0" max="3" step="0.1"><output id="oPhenyl"></output></div>
         <div class="ctl"><label for="sVaso">Vasopressin</label><input type="range" id="sVaso" min="0" max="0.06" step="0.01"><output id="oVaso"></output></div>
-        <p class="hint">Catecholamines in mcg/kg/min, vasopressin in units/min. Pulse handles uptake, effect and clearance.</p>
+        <p class="hint">Catecholamines and phenylephrine in mcg/kg/min, vasopressin in units/min. Pulse 4.4 has no dobutamine, so use epinephrine as the inotrope.</p>
         <div class="btns">
           <button id="bFluid">Saline 500 ml</button>
-          <button id="bRl">Ringer's 500 ml</button>
+          <button id="bRl">Plasma-Lyte 500 ml</button>
           <button id="bPrbc">PRBC 1 unit</button>
           <button id="bAbx">Antibiotics</button>
         </div>

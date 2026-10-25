@@ -11,7 +11,7 @@ const OBJ_LIB = {
   abx: { en: "Give antibiotics early", ar: "إدي المضاد الحيوي بدري", w: 20, deadline: 300, test: c => c.A.abx > 0 },
   source: { en: "Call for source control", ar: "اطلب السيطرة على مصدر النزيف/العدوى", w: 20, deadline: 480, test: c => c.A.source > 0 },
   prbc: { en: "Transfuse PRBC", ar: "نقل دم PRBC", w: 15, deadline: 300, test: c => c.A.prbc > 0 },
-  inotrope: { en: "Start an inotrope (dobutamine or epinephrine)", ar: "ابدأ inotrope (دوبيوتامين أو أدرينالين)", w: 20, test: c => c.V.drugs.dobu >= 2.5 || c.V.drugs.epi >= 0.03 },
+  inotrope: { en: "Start an inotrope (epinephrine)", ar: "ابدأ inotrope (أدرينالين)", w: 20, test: c => c.V.drugs.epi >= 0.03 },
   ecmo_vv: { en: "Initiate VV ECMO when indicated", ar: "ابدأ VV ECMO لما يبقى عليه indication", w: 20, test: c => c.V.ecmo.on && c.V.ecmo.mode === "VV" },
   ecmo_va: { en: "Initiate VA ECMO for refractory shock", ar: "ابدأ VA ECMO للشوك المقاوم", w: 20, test: c => c.V.ecmo.on && c.V.ecmo.mode === "VA" },
   pven_safe: { en: "ECMO flow ≥ 3.5 L/min with Pven > −100 and no chatter", ar: "فلو ≥ ٣.٥ لتر مع Pven أعلى من −١٠٠ ومن غير chatter", w: 20, hold: 30, test: c => c.V.ecmo.on && c.V.ecmo.flow >= 3.5 && c.V.ecmo.pven > -100 && c.V.ecmo.collapse < 0.4 },

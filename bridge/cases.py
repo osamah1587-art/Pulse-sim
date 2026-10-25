@@ -3,7 +3,7 @@ Objectives and scoring live in the browser (web/cases.js) and read the vitals st
 """
 import random
 
-BASE_STATE = "StandardMale@0s.json"
+BASE_STATE = "Ventilated@0s.json"
 SEPSIS_STATE = "sim/Sepsis.json"
 
 
@@ -138,7 +138,7 @@ class Hem(Case):
 
     def setup(self):
         self.flags.update(bleeding=True, bleed_site="Splanchnic")
-        self.s.act({"type": "hemorrhage", "compartment": "Splanchnic", "rate": 140})
+        self.s.act({"type": "hemorrhage", "compartment": "Splanchnic", "rate": 260})
 
     def case_tick(self):
         self.once("drain", lambda: self.s.t > 40, lambda: say(self.s, "Nurse: 400 ml of fresh blood in the drain over 30 minutes.", "الممرضة: الدرنقة نزّلت ٤٠٠ مل دم فريش في نص ساعة."))
@@ -148,21 +148,25 @@ class Sepsis(Case):
     id = "sep"
     state = SEPSIS_STATE
 
+    def setup(self):
+        self.s.act({"type": "intubate"})
+        self.s.act({"type": "cvmod", "svr": 0.4})
+
     def case_tick(self):
         s = self.s
         self.once("cultures", lambda: s.t > 60, lambda: say(s, "Nurse: cultures sent. Hang antibiotics now?", "الممرضة: المزارع اتبعتت. أعلّق المضاد الحيوي؟"))
-        if self.flags.get("abx"):
+        # Antibiotics: vasoplegia eases slowly (SVR multiplier 0.4 -> 0.7 over 15 min)
+        if self.flags.get("abx") and int(s.t) % 30 == 0 and self.flags.get("lastAbx") != int(s.t):
+            self.flags["lastAbx"] = int(s.t)
             k = min(1.0, (s.t - self.flags["abx"]) / 900.0)
-            if int(s.t) % 30 == 0 and self.flags.get("lastAbx") != int(s.t):
-                self.flags["lastAbx"] = int(s.t)
-                s.act({"type": "cvmod", "svr": 1.0 + 0.6 * k})
+            s.act({"type": "cvmod", "svr": 0.4 + 0.3 * k})
 
 
 class Cardiogenic(Case):
     id = "card"
 
     def setup(self):
-        self.s.act({"type": "cvmod", "sv": 0.35})
+        self.s.act({"type": "cvmod", "sv": 0.25})
 
     def case_tick(self):
         self.once("mottled", lambda: self.s.t > 50, lambda: say(self.s, "Nurse: mottled to the knees, urine 10 ml last hour.", "الممرضة: بقع لحد الركبة والبول ١٠ مل في آخر ساعة."))
@@ -193,11 +197,13 @@ class Station3(Case):
     def case_tick(self):
         s = self.s
         if self.hidden == "malpos" and s.t > 30 and not self.flags.get("repositioned"):
-            if s.pump.rd_mul < 2.8:
-                s.pump.rd_mul = min(2.8, s.pump.rd_mul + 0.25 * 2.0 / 60)
+            if s.pump.rd_mul < 3.5:
+                s.pump.rd_mul = min(3.5, s.pump.rd_mul + 0.0025)
+                if int(s.t * 4) % 20 == 0:
+                    s.act({"type": "ecmo", "rdMul": s.pump.rd_mul})
         if self.hidden == "hypo" and s.t > 20 and not self.flags.get("bleedStarted"):
             self.flags.update(bleedStarted=True, bleeding=True, bleed_site="VenaCava")
-            s.act({"type": "hemorrhage", "compartment": "VenaCava", "rate": 190})
+            s.act({"type": "hemorrhage", "compartment": "VenaCava", "rate": 260})
         if not self.flags.get("alarmAt") and s.ecmo["on"] and s.pump.pven < -100:
             self.flags["alarmAt"] = s.t
             s.events.append(("flag", "alarmAt", s.t, s.pump.rpm))

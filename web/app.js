@@ -97,7 +97,7 @@ const SL = [
   ["sRr", "oRr", v => v + " /min", v => ({ type: "vent", rr: v }), () => V.vent.rr, "RR"],
   ["sNe", "oNe", v => v.toFixed(2), v => ({ type: "drug", drug: "ne", dose: v }), () => V.drugs.ne, "Norepinephrine"],
   ["sEpi", "oEpi", v => v.toFixed(2), v => ({ type: "drug", drug: "epi", dose: v }), () => V.drugs.epi, "Epinephrine"],
-  ["sDobu", "oDobu", v => v.toFixed(0), v => ({ type: "drug", drug: "dobu", dose: v }), () => V.drugs.dobu, "Dobutamine"],
+  ["sPhenyl", "oPhenyl", v => v.toFixed(1), v => ({ type: "drug", drug: "phenyl", dose: v }), () => V.drugs.phenyl, "Phenylephrine"],
   ["sVaso", "oVaso", v => v.toFixed(2) + " U", v => ({ type: "drug", drug: "vaso", dose: v }), () => V.drugs.vaso, "Vasopressin"],
   ["sRpm", "oRpm", v => v + "", v => { if (V.ecmo.on && v > V.ecmo.rpm && V.ecmo.collapse > 0.6) C.F.rpmUpDuringSuck = true; if (V.ecmo.on && C.F.alarmAt && v < V.ecmo.rpm && !C.F.rpmDownAt) C.F.rpmDownAt = V.t; return { type: "ecmo", rpm: v }; }, () => V.ecmo.rpm, "ECMO RPM"],
   ["sSweep", "oSweep", v => v.toFixed(1) + " L", v => ({ type: "ecmo", sweep: v }), () => V.ecmo.sweep, "Sweep"],
@@ -136,8 +136,8 @@ $("btnEnd").onclick = () => endCase("Ended by user");
 
 // ---------- interventions ----------
 $("bFluid").onclick = () => { action({ type: "fluid", compound: "Saline", ml: 500, rate: 250 }); act("fluid", "Saline 500 ml over 2 min", { crystalloidMl: 500 }); };
-$("bRl").onclick = () => { action({ type: "fluid", compound: "RingersLactate", ml: 500, rate: 250 }); act("fluid", "Ringer's lactate 500 ml over 2 min", { crystalloidMl: 500 }); };
-$("bPrbc").onclick = () => { action({ type: "fluid", compound: "Blood", ml: 300, rate: 100 }); act("prbc", "PRBC 1 unit (300 ml) over 3 min", { prbcMl: 300 }); };
+$("bRl").onclick = () => { action({ type: "fluid", compound: "PlasmaLyte", ml: 500, rate: 250 }); act("fluid", "Plasma-Lyte 500 ml over 2 min", { crystalloidMl: 500 }); };
+$("bPrbc").onclick = () => { action({ type: "fluid", compound: "PackedRBC", ml: 300, rate: 100 }); act("prbc", "PRBC 1 unit (300 ml) over 3 min", { prbcMl: 300 }); };
 $("bAbx").onclick = () => { send({ type: "proc", name: "abx" }); act("abx", "Broad-spectrum antibiotics given"); };
 $("bSource").onclick = () => { send({ type: "proc", name: "source" }); act("source", "Source / bleeding control requested"); };
 $("bNeedle").onclick = () => { send({ type: "proc", name: "needle" }); act("needle", "Needle decompression"); };
@@ -330,7 +330,7 @@ function stateSnapshot() {
   return [
     `Sim time ${fmtT(V.t)}. HR ${num(V.hr)}, ABP ${num(V.sys)}/${num(V.dia)} (MAP ${num(V.map)}), CVP ${num(V.cvp)}, SpO2 ${num(V.spo2 * 100)}%, EtCO2 ${num(V.etco2)}, CO ${num(V.co, 1)} L/min, temp ${num(V.temp, 1)}, urine ${num(V.urine * 60)} ml/h.`,
     `Vent: ${v.mode} ${v.mode === "VC" ? "Vt " + v.vt : "Pinsp " + v.pinsp}, RR ${v.rr}, PEEP ${v.peep}, FiO2 ${Math.round(v.fio2 * 100)}%, Ppeak ${num(V.ppeak)}, Pplat ${num(V.pplat)}.`,
-    `Drugs: norepinephrine ${d.ne}, epinephrine ${d.epi}, dobutamine ${d.dobu} mcg/kg/min, vasopressin ${d.vaso} U/min. Crystalloid given ${C.A.crystalloidMl || 0} ml, PRBC ${C.A.prbcMl || 0} ml.`,
+    `Drugs: norepinephrine ${d.ne}, epinephrine ${d.epi}, phenylephrine ${d.phenyl} mcg/kg/min, vasopressin ${d.vaso} U/min. Crystalloid given ${C.A.crystalloidMl || 0} ml, PRBC ${C.A.prbcMl || 0} ml.`,
     E.on ? `ECMO ${E.mode}: ${E.rpm} rpm, flow ${num(E.flow, 2)} L/min, Pven ${num(E.pven)}, sweep ${E.sweep} L, FdO2 ${Math.round(E.fdo2 * 100)}%, line chatter ${E.collapse > 0.6 ? "YES" : "no"}.` : "No ECMO.",
     C.abg ? `Last ABG at ${fmtT(C.abg.t)}: pH ${num(C.abg.ph, 2)}, PaO2 ${num(C.abg.pao2)}, PaCO2 ${num(C.abg.paco2)}, lactate ${num(C.abg.lac, 1)}, Hb ${num(C.abg.hb, 1)}.` : "No ABG sent yet.",
   ].join("\n");
@@ -409,5 +409,5 @@ $("bDebriefStop").onclick = () => debCtl && debCtl.abort();
 $("bGen").onclick = () => { $("genStatus").textContent = "Coming in the next version: Claude-generated cases on Pulse."; };
 
 // ---------- start ----------
-sizeWaves(); renderObjs(); requestAnimationFrame(frame); connect();
+C = newCaseState(); sizeWaves(); renderObjs(); requestAnimationFrame(frame); connect();
 })();
