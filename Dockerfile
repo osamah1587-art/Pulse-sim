@@ -4,7 +4,7 @@ ARG PULSE_TAG=REL_4_4_0
 ARG MAKE_JOBS=2
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      git build-essential ca-certificates wget python3 python3-dev python3-venv default-jdk-headless \
+      git build-essential ca-certificates wget python3 python3-dev python3-venv default-jdk \
     && rm -rf /var/lib/apt/lists/*
 RUN python3 -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH" JAVA_HOME=/usr/lib/jvm/default-java
