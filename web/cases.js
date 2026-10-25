@@ -43,7 +43,7 @@ const CASES = {
     briefAr: "راجل ٥٥ سنة، جلطة أمامية، اتعمله قسطرة من ساعتين، واتعمله intubation بسبب ارتشاح رئوي. أطرافه باردة وعرقان.",
     hiddenNote: "Stroke volume reduced to 35% of normal (severe LV failure).",
     objectives: [libObj("echo_done"), libObj("inotrope"), libObj("map65"),
-      { id: "mcs", en: "Escalate to VA ECMO if lactate stays > 4", ar: "صعّد لـ VA ECMO لو اللاكتات فضلت فوق ٤", w: 20, test: c => (c.V.ecmo.on && c.V.ecmo.mode === "VA") || (c.V.lac_mmol < 3 && c.t > 600) },
+      { id: "mcs", en: "Escalate to VA ECMO if MAP stays < 65 on epinephrine", ar: "صعّد لـ VA ECMO لو الـ MAP فضل تحت ٦٥ على الأدرينالين", w: 20, test: c => (c.V.ecmo.on && c.V.ecmo.mode === "VA") || (c.V.map >= 65 && c.V.drugs.epi > 0 && c.t > 600) },
       { id: "fluid_cs", en: "Fluid > 500 ml in cardiogenic shock", ar: "سوائل أكتر من ٥٠٠ مل في صدمة قلبية", w: 15, pitfall: true, test: c => (c.A.crystalloidMl || 0) > 500 }] },
   ards: { title: "Severe ARDS → ECMO", tag: "ECMO", duration: 1500,
     brief: "34-year-old man, influenza ARDS day 2. FiO₂ 1.0, profound hypoxaemia, high plateau pressure.",
