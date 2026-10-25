@@ -15,6 +15,7 @@ let firstFrame = true;
 let ws = null, caseKey = "free", def = CASES.free, V = null, ended = false, running = true, speed = 1;
 let C = null; // per-case page state
 let aiOn = false;
+let loadingCase = false; // ignore frames until the server confirms the new case started
 function newCaseState() {
   return { A: {}, F: {}, log: [], trends: [], abg: null, chatTurns: [], objs: (def.objectives || []).filter(Boolean).map(o => ({ ...o, met: null, fired: null, hold: o.hold || 0, acc: 0, na: false, late: false })), hidden: null };
 }
@@ -29,7 +30,7 @@ function connect() {
     const m = JSON.parse(ev.data);
     if (m.type === "frame") onFrame(m);
     else if (m.type === "loading") { $("conn").textContent = "loading patient…"; }
-    else if (m.type === "started") { $("conn").textContent = "Pulse 4.4 running"; }
+    else if (m.type === "started") { $("conn").textContent = "Pulse 4.4 running"; if (m.case === caseKey) { loadingCase = false; firstFrame = true; } }
     else if (m.type === "finding") finding(m.kind === "echo" ? "Echo" : m.kind === "circuit" ? "Circuit" : "Exam", m.text);
     else if (m.type === "reveal") { C.hidden = m.hidden; showReveal(); }
     else if (m.type === "error") { $("conn").textContent = m.msg; }
@@ -66,17 +67,19 @@ function startCase(key) {
   pvHist = []; samples = []; firstFrame = true; clearWaves(); renderObjs();
   chatMsg("team", "Team", "Handover: " + def.brief);
   log("Case loaded: " + def.title);
+  loadingCase = true;
   send({ type: "start", case: key, speed });
 }
 for (const k in CASES) { const b = document.createElement("button"); b.dataset.k = k; b.innerHTML = esc(CASES[k].title) + "<small>" + esc(CASES[k].tag) + "</small>"; b.onclick = () => startCase(k); $("chips").append(b); }
 
 // ---------- frames ----------
 function onFrame(m) {
+  if (loadingCase || !C) return; // stale frame from the previous case
   V = m.v;
   if (m.case && m.case.flags) Object.assign(C.F, m.case.flags);
   for (const e of m.events || []) {
     if (e[0] === "team") teamSay(e[1], e[2]);
-    else if (e[0] === "flag" && e[1] === "alarmAt") { C.F.alarmAt = e[2]; C.F.rpmAtAlarm = e[3]; }
+    else if (e[0] === "flag" && e[1] === "alarmAt") { C.F.alarmAt = e[2]; C.F.rpmAtAlarm = e[3]; log("ALARM: drainage line chatter, Pven " + num(V.ecmo.pven) + " at " + e[3] + " rpm"); }
     else if (e[0] === "error") log("⚠ " + e[1]);
   }
   for (const w of m.wave || []) addSample(w);
@@ -192,6 +195,10 @@ function endCase(reason) {
   if (ended) return; if (def.sandbox && reason !== "Ended by user") return;
   ended = true; running = false; action({ type: "pause", value: true });
   $("btnPlay").textContent = "Ended"; $("btnPlay").classList.remove("on");
+  // Objectives marked final must still be true when the case ends (e.g. flow restored and holding).
+  const ctx = { V, A: C.A, F: C.F, t: V ? V.t : 0 };
+  for (const o of C.objs) if (o.final && o.met != null) { let r; try { r = o.test(ctx); } catch (e) { r = false; } if (!r) { o.met = null; log("Objective lost by case end: " + o.en); } }
+  renderObjs();
   log("Case ended: " + reason);
   const sc = scoreOf(); $("resultCard").hidden = false; $("scoreBig").textContent = C.objs.length ? sc.pct + "%" : "—";
   send({ type: "reveal" });
@@ -297,7 +304,7 @@ function updateNums() {
       ["PaO₂", num(g.pao2), "mmHg", g.pao2 < 60 ? "bad" : ""], ["PaCO₂", num(g.paco2), "mmHg", g.paco2 > 55 ? "bad" : g.paco2 > 45 || g.paco2 < 30 ? "warn" : ""],
       ["HCO₃⁻", num(g.hco3, 1), "", g.hco3 < 18 ? "warn" : ""], ["Lactate", num(g.lac, 1), "mmol/L", g.lac > 4 ? "bad" : g.lac > 2 ? "warn" : ""],
       ["P/F", num(g.pf), "", g.pf < 100 ? "bad" : g.pf < 300 ? "warn" : ""], ["Hb", num(g.hb, 1), "g/dL", g.hb < 7 ? "bad" : g.hb < 9 ? "warn" : ""],
-      ["Temp", num(V.temp, 1), "°C", V.temp > 38.3 ? "warn" : ""], ["Urine", num(V.urine * 60), "ml/h", V.urine * 60 < 30 ? "warn" : ""],
+      ["Temp", num(V.temp, 1), "°C", V.temp > 38.3 ? "warn" : ""], ["Urine", num(Math.max(0, V.urine * 60)), "ml/h", V.urine * 60 < 30 ? "warn" : ""],
     ]);
   } else { $("abgAge").textContent = "not sent"; $("abg").innerHTML = '<p class="hint" style="grid-column:1/-1">Press "Send ABG" in Procedures.</p>'; }
   const svr = V.svr != null ? V.svr * 1333 : null;
