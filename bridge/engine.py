@@ -281,13 +281,13 @@ class SimSession:
         "ne": ("Norepinephrine", 16.0),
         "epi": ("Epinephrine", 16.0),
         "phenyl": ("Phenylephrine", 100.0),
-        "vaso": ("Vasopressin", 0.4),
+        "vaso": ("Vasopressin", 25.0),
     }
 
     def _send_drug(self, name):
         sub, conc = self.DRUGS[name]
-        dose = self.drugs[name]  # mcg/kg/min (vasopressin: units/min * 1000 ~ treated as mcg/min equivalent)
-        rate_ml_min = dose * self.weight / conc if name != "vaso" else dose / conc
+        dose = self.drugs[name]  # mcg/kg/min; vasopressin in U/min, mapped 1 U = 25 mcg so 0.04 U/min gives Pulse a ~+10 mmHg MAP response (calibrated, see README)
+        rate_ml_min = dose * self.weight / conc if name != "vaso" else dose  # vaso: 25 mcg/mL bag, 1 mL per U
         inf = SESubstanceInfusion()
         inf.set_substance(sub)
         inf.get_concentration().set_value(conc, MassPerVolumeUnit.ug_Per_mL)

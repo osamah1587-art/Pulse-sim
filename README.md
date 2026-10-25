@@ -35,4 +35,9 @@ docker compose up -d
 
 Free play, post-op bleeding, septic shock, cardiogenic shock, severe ARDS to VV ECMO, and Station 3 (VV ECMO drainage alarm with a hidden cause).
 
+## Drug notes
+
+Pulse 4.4 has norepinephrine, epinephrine, phenylephrine and vasopressin, but no dobutamine, so epinephrine is the inotrope.
+Vasopressin is entered in units/min and mapped to 25 mcg per unit, calibrated so 0.04 U/min raises MAP by about 10 mmHg in a vasoplegic patient in Pulse.
+
 Teaching use only. Not for clinical decisions.
